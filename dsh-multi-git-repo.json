@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "enabled": true,
+  "includeProjectRoot": false,
+  "repositories": [
+    {
+      "name": "dsh-multi-git-repo-manager",
+      "path": "dsh-plugins/dsh-multi-git-repo-manager"
+    },
+    {
+      "name": "dsh-file-review-tab-Multi-git-repository",
+      "path": "dsh-plugins/dsh-file-review-tab-Multi-git-repository"
+    }
+  ],
+  "directories": [],
+  "discovery": {
+    "containers": [
+      "dsh-plugins"
+    ]
+  }
+}

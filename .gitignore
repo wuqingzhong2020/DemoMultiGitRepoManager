@@ -66,3 +66,11 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+dsh-plugins
+
+# Multi-repository manager local configuration and Python caches
+envVar_v2.local.ini
+__pycache__/
+*.py[cod]
+dist
