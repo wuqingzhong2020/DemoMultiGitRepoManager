@@ -171,5 +171,3 @@ python -m unittest discover -s tests -v
 测试使用临时 Git 工作区、本地 bare 仓库和调度替身，不向真实插件远程推送，也不安装到实际 Desktop。
 
 退出码：`0` 成功，`1` 运行失败或状态阻断，`2` 参数／配置无效，`130` 用户中断。超时终止本次子进程树，批量操作不自动回滚已成功的仓库。
-
-完整设计见 [多 Git 管理方案](docs/multi-git-repository-management-plan.md)，实施与验证结果见 [验证记录](docs/management-validation.md)。
