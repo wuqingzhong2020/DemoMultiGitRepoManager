@@ -100,15 +100,16 @@ python envBuild.py pack
 
 `deps` 使用 `pnpm install --frozen-lockfile`；其余命令委托各仓库已有 scripts。pnpm run 的依赖状态检查使用 warn 模式，依赖安装由 deps 明确执行。build/deps/pack 选择审查插件时自动加入管理插件；执行顺序为管理插件、审查插件，依赖失败时阻断依赖它的任务。构建不会自动安装到 Desktop。
 
-也可以用一个命令依次编译、打包、安装最新包并启动 Desktop。运行前完整退出 Desktop（包括托盘）：
+也可以用一个命令依次编译、打包、安装最新包并启动 Desktop。默认要求运行前完整退出 Desktop（包括托盘）；加 `--stop-desktop` 时由该命令先关闭 Desktop，并在流程结束时重新启动：
 
 ```powershell
 python envBuild.py rebuild-install
 python envBuild.py rebuild-install --with-deps
-python envBuild.py rebuild-install --dry-run
+python envBuild.py rebuild-install --stop-desktop
+python envBuild.py rebuild-install --stop-desktop --dry-run
 ```
 
-`rebuild-install` 默认不安装依赖；首次构建或依赖变更时加 `--with-deps`，在编译前执行 `deps`。流程始终失败即停止，编译或打包失败不会继续安装旧包，安装失败不会启动 Desktop。开始前检查 Desktop 已退出、Profile 和工具有效；安装时再次检查应用状态。支持 `--repo` 选择仓库并自动加入其依赖。`--dry-run` 预览所有步骤，不要求已有安装包；与 `--with-deps` 可以组合使用。
+`rebuild-install` 默认不安装依赖，也默认不关闭 Desktop；首次构建或依赖变更时加 `--with-deps`，在编译前执行 `deps`。加 `--stop-desktop` 时先执行与 `desktop stop` 相同的关闭流程（先请求退出，10 秒未退出再强制结束，包含托盘），再编译、打包、安装，并在最后提交 Desktop 启动请求；预览只打印将结束的进程，且不再要求 Desktop 已退出。流程始终失败即停止，编译或打包失败不会继续安装旧包，安装失败不会启动 Desktop，关闭 Desktop 失败也不会开始编译。开始前检查 Desktop 已退出、Profile 和工具有效；安装时再次检查应用状态。支持 `--repo` 选择仓库并自动加入其依赖。`--dry-run` 预览所有步骤，不要求已有安装包；与 `--with-deps`、`--stop-desktop` 可以组合使用。
 
 `pack` 优先运行已有 `test:pack`，验证安装包及 SHA256；没有该 script 的新仓库使用普通 pnpm pack 并执行相同的归档规则。先执行 build，再执行 pack。所有安装包统一放在本工程根目录 `dist/`，管理入口通过 `MRM_DIST_DIR` 把绝对输出路径传给插件脚本。包名和版本从各仓库 `package.json` 读取，不写死版本号。
 
@@ -165,7 +166,7 @@ python envBuild.py desktop patch
 
 check-patch 使用管理插件已有适配脚本的 `--check`，只检查配置安装目录下的 `resources/app.asar`。patch 明确调用同一脚本；脚本负责兼容性核验和备份。启动、关闭、安装和适配均为独立命令，Git 命令或 build 不会隐式触发。
 
-`desktop stop` 是唯一会结束 Desktop 进程的命令，只在你显式调用时执行。它先请求正常退出并等待 10 秒，仍未退出的进程再强制结束，因此托盘和渲染进程会一起关闭；进程已退出时只提示「Desktop 未在运行」。`--dry-run` 只列出将要结束的 PID。**该命令会终止正在承载当前会话的 Desktop**，需要继续在 Desktop 里工作时要重新启动并等待会话恢复。
+`desktop stop` 与 `rebuild-install --stop-desktop` 是仅有的两个会结束 Desktop 进程的入口，都只在你显式调用时执行。它先请求正常退出并等待 10 秒，仍未退出的进程再强制结束，因此托盘和渲染进程会一起关闭；进程已退出时只提示「Desktop 未在运行」。`--dry-run` 只列出将要结束的 PID。**该命令会终止正在承载当前会话的 Desktop**，需要继续在 Desktop 里工作时要重新启动并等待会话恢复。
 
 Desktop 安装与 patch 会检查进程状态，有应用进程时拒绝执行，不自动结束用户进程。对应命令的 dry-run 仍会验证路径、进程和已存在的安装包，但不复制文件、修改 Profile 或 Desktop。
 

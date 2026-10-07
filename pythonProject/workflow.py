@@ -11,10 +11,14 @@ from .repo_config import Manifest, RepoSpec
 
 
 def rebuild_install(manifest: Manifest, env: Environment, repos: list[RepoSpec],
-                    dry_run: bool = False, with_deps: bool = False) -> int:
+                    dry_run: bool = False, with_deps: bool = False,
+                    stop_desktop: bool = False) -> int:
     desktop = Desktop(manifest, env)
+    # 默认要求用户已退出 Desktop；显式选择时由本流程结束它（含托盘），预览只打印将结束的进程。
+    if stop_desktop:
+        desktop.stop(dry_run=dry_run)
     # 开始前验证应用已退出、Profile 和工具可用；新工程不需要已有 tgz。
-    desktop.check_install_environment()
+    desktop.check_install_environment(require_closed=not (dry_run and stop_desktop))
     ordered = manifest.ordered(repos)
     tasks = PluginTasks(manifest, env)
     phases = (["deps"] if with_deps else []) + ["build", "pack"]

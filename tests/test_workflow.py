@@ -33,7 +33,13 @@ class WorkflowTests(unittest.TestCase):
         self.tasks = Mock(spec=PluginTasks)
         self.failures = {}
         self.task_calls = []
-        self.desktop.check_install_environment.side_effect = lambda: self.events.append("preflight")
+        self.desktop.check_install_environment.side_effect = (
+            lambda require_closed=True: self.events.append("preflight")
+        )
+
+        def stop(dry_run):
+            self.events.append("stop-preview" if dry_run else "stop")
+            return 0
 
         def task(phase, repos, dry_run, fail_fast):
             self.events.append(phase)
@@ -51,6 +57,7 @@ class WorkflowTests(unittest.TestCase):
             return 0
 
         self.tasks.run.side_effect = task
+        self.desktop.stop.side_effect = stop
         self.desktop.install.side_effect = install
         self.desktop.start.side_effect = start
         desktop_patch = patch("pythonProject.workflow.Desktop", return_value=self.desktop)
@@ -76,6 +83,37 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(names, [MANAGER, REVIEW])
             self.assertFalse(dry_run)
             self.assertTrue(fail_fast)
+
+    def test_default_run_never_stops_desktop(self):
+        result, _ = self.invoke()
+        self.assertEqual(result, 0)
+        self.desktop.stop.assert_not_called()
+        self.desktop.check_install_environment.assert_called_once_with(require_closed=True)
+
+    def test_stop_desktop_closes_application_before_build_and_starts_it_again(self):
+        result, _ = self.invoke("--stop-desktop")
+        self.assertEqual(result, 0)
+        self.assertEqual(self.events, ["stop", "preflight", "build", "pack", "install", "start"])
+        self.desktop.stop.assert_called_once_with(dry_run=False)
+
+    def test_dry_run_stop_desktop_previews_closing_without_requiring_exit(self):
+        result, output = self.invoke("--dry-run", "--stop-desktop")
+        self.assertEqual(result, 0)
+        self.assertEqual(self.events, ["stop-preview", "preflight", "build", "pack", "start-preview"])
+        self.desktop.stop.assert_called_once_with(dry_run=True)
+        self.desktop.check_install_environment.assert_called_once_with(require_closed=False)
+        self.desktop.install.assert_not_called()
+        self.assertIn("desktop install", output)
+
+    def test_stop_failure_prevents_build_and_installation(self):
+        self.desktop.stop.side_effect = OperationError("cannot close Desktop")
+        result, output = self.invoke("--stop-desktop")
+        self.assertEqual(result, 1)
+        self.assertEqual(self.events, [])
+        self.tasks_class.assert_not_called()
+        self.desktop.install.assert_not_called()
+        self.desktop.start.assert_not_called()
+        self.assertIn("cannot close Desktop", output)
 
     def test_with_deps_and_consumer_selection_includes_dependency(self):
         result, _ = self.invoke("--with-deps", "--repo", REVIEW)

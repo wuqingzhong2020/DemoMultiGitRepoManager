@@ -66,7 +66,7 @@ _SECTIONS: Sequence[tuple[str, str, Sequence[tuple[str, str]]]] = (
     ),
     (
         "Desktop 启动、关闭、安装与适配",
-        "启动、关闭、安装与 patch 均为独立命令；Git 命令和 build 不会隐式触发。",
+        "启动、关闭、安装与 patch 均为独立命令；Git 命令和 build 不会隐式触发，只有显式传入 rebuild-install --stop-desktop 时流程才会先关闭 Desktop。",
         (
             ("desktop info", "显示 Desktop 安装目录、可执行文件与 Profile 路径"),
             ("desktop start [--dry-run]", "启动 Desktop"),
@@ -75,7 +75,7 @@ _SECTIONS: Sequence[tuple[str, str, Sequence[tuple[str, str]]]] = (
             ("desktop install --archive <历史包.tgz>", "以 dist 内历史包安装指定构建，可重复；未指定的配套插件仍用 latest"),
             ("desktop check-patch [--dry-run]", "只检查配置安装目录下 resources/app.asar 的适配状态"),
             ("desktop patch [--dry-run]", "调用插件适配脚本修改 app.asar，由脚本负责核验与备份"),
-            ("rebuild-install [--with-deps] [--dry-run]", "依次编译、打包、安装最新包并启动 Desktop，失败即停止"),
+            ("rebuild-install [--stop-desktop] [--with-deps] [--dry-run]", "依次编译、打包、安装最新包并启动 Desktop，失败即停止"),
         ),
     ),
 )
@@ -84,6 +84,7 @@ _OPTIONS: Sequence[tuple[str, str]] = (
     ("--repo 名称", "可重复，默认只操作启用的清单仓库；deps/build/pack/rebuild-install/desktop install 会自动加入依赖"),
     ("--fail-fast", "某个独立仓库失败后停止后续仓库；默认继续执行其他仓库并在汇总中保留原因"),
     ("--dry-run", "对写操作只做本地预检并打印命令，不发起 fetch/pull/push，也不切换分支或安装"),
+    ("--stop-desktop", "仅 rebuild-install：编译前关闭 Desktop（包含托盘），结束时重新启动；默认不关闭，要求用户先退出 Desktop"),
     ("--", "batch 之后的内容作为原样子进程参数传递，不经过 shell 展开"),
 )
 
@@ -140,6 +141,8 @@ _EXAMPLES: Sequence[tuple[str, Sequence[tuple[str, str]]]] = (
             ("desktop install --archive <历史包.tgz> --dry-run", "回装 dist 内的指定历史构建"),
             ("desktop patch --dry-run", "预览 app.asar 适配，不修改文件"),
             ("rebuild-install --with-deps", "编译、打包、安装并启动 Desktop"),
+            ("rebuild-install --stop-desktop", "先关闭 Desktop，再编译、打包、安装并重新启动"),
+            ("rebuild-install --stop-desktop --with-deps --dry-run", "预览关闭 Desktop、安装依赖与完整交付流程"),
         ),
     ),
 )

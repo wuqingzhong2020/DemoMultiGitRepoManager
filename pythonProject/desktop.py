@@ -203,9 +203,14 @@ class Desktop:
         print("Desktop 已关闭（包含托盘进程）。")
         return 0
 
-    def check_install_environment(self) -> tuple[Path, list[str]]:
-        """完整流程可在编译前检查安装环境，不要求安装包已存在。"""
-        self._closed()
+    def check_install_environment(self, require_closed: bool = True) -> tuple[Path, list[str]]:
+        """完整流程可在编译前检查安装环境，不要求安装包已存在。
+
+        `require_closed=False` 仅供 `rebuild-install --stop-desktop --dry-run` 使用：
+        预览已打印将要结束的进程，实际运行时应用在该步骤已被关闭。
+        """
+        if require_closed:
+            self._closed()
         profile = self.env.profile_directory()
         if not profile.is_dir():
             raise OperationError(f"Desktop Profile 不存在，请先启动 Desktop 或配置 MRM_DSH_PROFILE_DIR: {profile}")

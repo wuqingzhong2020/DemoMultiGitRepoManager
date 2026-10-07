@@ -63,6 +63,7 @@ def parser() -> argparse.ArgumentParser:
     workflow = commands.add_parser("rebuild-install", help="依次编译、打包、安装并启动 Desktop，失败即停止")
     workflow.add_argument("--repo", action="append", metavar="名称", help="可重复，自动加入依赖，默认选择所有启用仓库")
     workflow.add_argument("--with-deps", action="store_true", help="编译前安装依赖，默认不安装依赖")
+    workflow.add_argument("--stop-desktop", action="store_true", help="编译前关闭 Desktop（包含托盘），流程结束时重新启动；默认不关闭")
     workflow.add_argument("--dry-run", action="store_true", help="预览完整流程，不编译、打包、安装或启动")
     desktop = commands.add_parser("desktop", help="Desktop 启动、关闭、安装及目录选择适配")
     desktop.add_argument("action", choices=("info", "start", "stop", "install", "patch", "check-patch"))
@@ -114,7 +115,8 @@ def _dispatch(arguments: list[str]) -> int:
         if not repos:
             raise ConfigError("未选择任何启用仓库")
         if args.command == "rebuild-install":
-            return rebuild_install(manifest, env, repos, args.dry_run, args.with_deps)
+            return rebuild_install(manifest, env, repos, dry_run=args.dry_run,
+                                   with_deps=args.with_deps, stop_desktop=args.stop_desktop)
         if args.command == "desktop":
             return Desktop(manifest, env).run(args.action, repos, args.dry_run, args.archive)
         dry_run = getattr(args, "dry_run", False)
