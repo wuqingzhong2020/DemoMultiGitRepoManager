@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import os
 import re
+import signal
 import subprocess
 import tempfile
+import time
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -114,6 +116,10 @@ def desktop_processes(executable: Path) -> list[int]:
 
 
 class Desktop:
+    # 关闭 Desktop 时先请求正常退出，超时后再强制结束。
+    STOP_GRACE_SECONDS = 10.0
+    STOP_FORCE_SECONDS = 15.0
+
     def __init__(self, manifest: Manifest, env: Environment, runner: Runner | None = None):
         self.manifest = manifest
         self.env = env
@@ -139,6 +145,62 @@ class Desktop:
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **flags,
         )
         print(f"已提交启动请求，PID={process.pid}。")
+        return 0
+
+    @staticmethod
+    def _request_stop(pids: list[int], force: bool) -> None:
+        """请求结束给定进程；Windows 连带子进程，避免残留托盘或渲染进程。"""
+        if not pids:
+            return
+        if os.name == "nt":
+            command = ["taskkill.exe"]
+            for pid in pids:
+                command += ["/PID", str(pid)]
+            command.append("/T")
+            if force:
+                command.append("/F")
+            # 正常退出请求对无窗口进程会失败，这里不视为错误，由调用者按存活情况决定是否强制。
+            subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+            return
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    @staticmethod
+    def _wait_exit(executable: Path, timeout: float) -> list[int]:
+        """等待进程全部退出，返回超时后仍存活的 PID。"""
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = desktop_processes(executable)
+            if not remaining or time.monotonic() >= deadline:
+                return remaining
+            time.sleep(0.5)
+
+    def stop(self, dry_run: bool) -> int:
+        """显式关闭 Desktop（包含托盘进程）；只有本命令会结束 Desktop 进程。"""
+        executable = self.env.desktop_executable()
+        running = desktop_processes(executable)
+        if not running:
+            print("Desktop 未在运行。")
+            return 0
+        print(f"{'[预览] ' if dry_run else ''}关闭 Desktop: {executable}\n  当前 PID: {running}")
+        if dry_run:
+            print("预览未结束任何进程。")
+            return 0
+        # 每次结束前重新枚举，避免使用可能已被复用的旧 PID。
+        self._request_stop(desktop_processes(executable), False)
+        print(f"已请求退出，等待进程结束（最多 {self.STOP_GRACE_SECONDS:.0f} 秒）...")
+        remaining = self._wait_exit(executable, self.STOP_GRACE_SECONDS)
+        if remaining:
+            print(f"宽限期内未退出，强制结束: {remaining}")
+            self._request_stop(remaining, True)
+            remaining = self._wait_exit(executable, self.STOP_FORCE_SECONDS)
+        if remaining:
+            raise OperationError(f"无法关闭 Desktop，仍有进程存活: {remaining}")
+        print("Desktop 已关闭（包含托盘进程）。")
         return 0
 
     def check_install_environment(self) -> tuple[Path, list[str]]:
@@ -235,6 +297,8 @@ class Desktop:
             return self.env.info(desktop=True)
         if action == "start":
             return self.start(dry_run)
+        if action == "stop":
+            return self.stop(dry_run)
         if action == "install":
             return self.install(repos, dry_run, archive_names)
         return self.patch(dry_run, check_only=action == "check-patch")

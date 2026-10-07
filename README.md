@@ -46,6 +46,7 @@ Windows 的程序默认是安装目录下的 `DeepSeek Harness.exe`；程序名�
 | `MRM_DSH_PROFILE_DIR` | 可选的 Desktop Profile 目录 |
 
 ```powershell
+python envBuild.py -h
 python envBuild.py init
 python envBuild.py info
 python envBuild.py info --desktop
@@ -53,6 +54,8 @@ python envBuild.py list
 python envBuild.py check
 python envBuild.py status
 ```
+
+`-h`／`--help` 按分组打印全部命令的用法与含义，以及公共选项、退出码和示例。不带命令、命令拼写错误或选项错误时输出同一份帮助；`-h`／`--help` 为退出码 `0`，其余三种情况为 `2`。每个命令后的 `-h`（如 `python envBuild.py desktop -h`）同样打印这份完整帮助。
 
 `init` 只创建缺失的环境模板；已有配置保持原样。普通 Git 管理不要求安装 Desktop、Node 或 pnpm。
 
@@ -139,12 +142,14 @@ python envBuild.py checkDsh
 
 INI 负责仓库来源和分支；DSH JSON 负责界面管理和文件审查范围。修改 INI 后，不会静默覆盖 JSON。
 
-## Desktop 启动、安装与目录选择适配
+## Desktop 启动、关闭、安装与目录选择适配
 
 ```powershell
 python envBuild.py desktop info
 python envBuild.py desktop start --dry-run
 python envBuild.py desktop start
+python envBuild.py desktop stop --dry-run
+python envBuild.py desktop stop
 python envBuild.py desktop install --dry-run
 python envBuild.py desktop install
 Get-ChildItem .\dist -Filter *.tgz
@@ -158,7 +163,9 @@ python envBuild.py desktop patch
 
 `--archive` 可重复，填写 `dist` 直属历史包文件名或完整路径，以安装指定构建。未指定的配套插件仍使用 latest；安装按包内 peerDependencies 检查配套版本，版本不匹配时阻断。历史包允许早于当前源码版本，便于回装已有构建。`--archive` 仅适用于 `desktop install`。
 
-check-patch 使用管理插件已有适配脚本的 `--check`，只检查配置安装目录下的 `resources/app.asar`。patch 明确调用同一脚本；脚本负责兼容性核验和备份。启动、安装和适配均为独立命令，Git 命令或 build 不会隐式触发。
+check-patch 使用管理插件已有适配脚本的 `--check`，只检查配置安装目录下的 `resources/app.asar`。patch 明确调用同一脚本；脚本负责兼容性核验和备份。启动、关闭、安装和适配均为独立命令，Git 命令或 build 不会隐式触发。
+
+`desktop stop` 是唯一会结束 Desktop 进程的命令，只在你显式调用时执行。它先请求正常退出并等待 10 秒，仍未退出的进程再强制结束，因此托盘和渲染进程会一起关闭；进程已退出时只提示「Desktop 未在运行」。`--dry-run` 只列出将要结束的 PID。**该命令会终止正在承载当前会话的 Desktop**，需要继续在 Desktop 里工作时要重新启动并等待会话恢复。
 
 Desktop 安装与 patch 会检查进程状态，有应用进程时拒绝执行，不自动结束用户进程。对应命令的 dry-run 仍会验证路径、进程和已存在的安装包，但不复制文件、修改 Profile 或 Desktop。
 
@@ -171,3 +178,9 @@ python -m unittest discover -s tests -v
 测试使用临时 Git 工作区、本地 bare 仓库和调度替身，不向真实插件远程推送，也不安装到实际 Desktop。
 
 退出码：`0` 成功，`1` 运行失败或状态阻断，`2` 参数／配置无效，`130` 用户中断。超时终止本次子进程树，批量操作不自动回滚已成功的仓库。
+
+除只打印帮助的空命令外，每次运行结束都会打印一行耗时统计，成功、受阻、报错和中断都会输出：
+
+```text
+[耗时统计] 命令 'status' 总执行耗时: 9.33 秒
+```
