@@ -1,6 +1,6 @@
 # DemoMultiGitRepoManager
 
-通过 `submodules.ini`、`envVar_v2.ini` 和 `envBuild.py` 管理 `dsh-plugins/` 下的独立 Git 仓库，并按依赖顺序调度插件构建和 DeepSeek Harness Desktop 接入。
+通过 `submodules.ini`、本机 `envVar_v2.ini`（不提交）和 `envBuild.py` 管理 `dsh-plugins/` 下的独立 Git 仓库，并按依赖顺序调度插件构建和 DeepSeek Harness Desktop 接入。
 
 目前纳管：
 
@@ -15,25 +15,36 @@
 
 Git 管理需要 Python 3.10+、支持 `git switch` 的 Git。插件构建按现有插件文档使用 Node.js 24 和 pnpm 11。工具路径留空时从 PATH 获取；配置的非空工具路径无效时会报错。
 
-`envVar_v2.ini` 包含通用参数和 Windows/Linux 平台节点。**DeepSeek Harness Desktop 安装路径从配置读取**，按实际位置修改：
+`envVar_v2.ini` 是**本机配置，不进入仓库**（`.gitignore` 用 `envVar*.ini` 通配忽略），仓库内没有这份文件。克隆后先运行非破坏性的 `init` 生成模板，再按实际位置填写：
+
+```powershell
+python envBuild.py init
+```
+
+`envVar_v2.ini` 包含通用参数和 Windows/Linux 平台节点。**DeepSeek Harness Desktop 安装路径从配置读取**，生成后按实际位置填写：
 
 ```ini
+[envVar_all]
+MRM_GIT_EXE =
+MRM_NODE_EXE =
+MRM_PNPM_EXE =
+MRM_GIT_TIMEOUT_SECONDS = 30
+MRM_NETWORK_TIMEOUT_SECONDS = 300
+MRM_TASK_TIMEOUT_SECONDS = 900
+
 [envVar_windows]
 MRM_DSH_DESKTOP_DIR = D:/app/DeepSeekHarnessDesktop
 MRM_DSH_DESKTOP_EXE =
 MRM_DSH_PROFILE_DIR =
 ```
 
-另一台机器也可以创建不提交的 `envVar_v2.local.ini`：
-
-```ini
-[envVar_windows]
-MRM_DSH_DESKTOP_DIR = E:/tools/DeepSeekHarnessDesktop
-```
-
 Windows 的程序默认是安装目录下的 `DeepSeek Harness.exe`；程序名称或布局不同时填写 `MRM_DSH_DESKTOP_EXE` 完整路径。Linux 须明确填写可执行文件路径。Profile 目录与安装目录独立，默认是当前用户的 `.dsh/profiles/desktop`。
 
-优先级为进程 `MRM_*` 变量、本机文件、共享文件、通用默认值；每个文件的平台节点覆盖通用节点。相对路径以本工程根目录为基准，支持 `~`、`$VAR`、`${VAR}` 和 `%VAR%`。读取配置不回写文件、不修改永久环境变量。
+优先级为进程 `MRM_*` 变量、`envVar_v2.ini`、通用默认值；文件内的平台节点覆盖通用节点。相对路径以本工程根目录为基准，支持 `~`、`$VAR`、`${VAR}` 和 `%VAR%`。读取配置不回写文件、不修改永久环境变量。
+
+未生成模板时命令仍按默认值运行，`info` 会提示缺少本机配置，Desktop 相关命令会提示先配置 `MRM_DSH_DESKTOP_DIR` 并给出 `init` 命令。
+
+文件名由 `pythonProject/env_config.py` 的 `ENV_FILE_STEM` 单点定义，代码中的文件名、模板注释、错误提示和命令帮助都从它派生，**改名只需改这一行**。`.gitignore` 用 `envVar*.ini` 通配忽略：改名后只要仍是 `envVar` 前缀加 `.ini` 后缀，忽略规则就不用动；换成别的前缀要同步改 `.gitignore` 一行，遗漏会被测试拦下。文档中出现的名称按需替换。
 
 | 参数 | 默认／用途 |
 | --- | --- |
@@ -57,7 +68,7 @@ python envBuild.py status
 
 `-h`／`--help` 按分组打印全部命令的用法与含义，以及公共选项、退出码和示例。不带命令、命令拼写错误或选项错误时输出同一份帮助；`-h`／`--help` 为退出码 `0`，其余三种情况为 `2`。每个命令后的 `-h`（如 `python envBuild.py desktop -h`）同样打印这份完整帮助。
 
-`init` 只创建缺失的环境模板；已有配置保持原样。普通 Git 管理不要求安装 Desktop、Node 或 pnpm。
+`init` 只创建缺失的本机环境模板，已有配置保持原样；该文件被忽略，生成后不会出现在 `git status` 中。普通 Git 管理不要求安装 Desktop、Node 或 pnpm。
 
 ## 日常 Git 管理
 
@@ -160,7 +171,7 @@ python envBuild.py desktop patch --dry-run
 python envBuild.py desktop patch
 ```
 
-安装前先完成插件 build/pack，并退出 Desktop（包括托盘）。默认一起安装两个插件的 latest：读取索引，验证最新包与历史包内容一致、包内身份及 SHA256，然后以对应版本包路径调用 pnpm，并强制刷新同版本本地包缓存，不额外复制第三份安装缓存。为确保宿主的 hoisted 安装布局也重新导入同版本包，安装前临时移出所选插件的 `package.json`；失败或中断时恢复原文件，成功后清理备份。命令显式指定包名和 file 路径，可更新 Profile 中指向已失效旧 tgz 的同名插件引用。安装位置仍从 `envVar_v2.ini` 读取；安装后在插件页确认需要的插件已启用。
+安装前先完成插件 build/pack，并退出 Desktop（包括托盘）。默认一起安装两个插件的 latest：读取索引，验证最新包与历史包内容一致、包内身份及 SHA256，然后以对应版本包路径调用 pnpm，并强制刷新同版本本地包缓存，不额外复制第三份安装缓存。为确保宿主的 hoisted 安装布局也重新导入同版本包，安装前临时移出所选插件的 `package.json`；失败或中断时恢复原文件，成功后清理备份。命令显式指定包名和 file 路径，可更新 Profile 中指向已失效旧 tgz 的同名插件引用。安装位置仍从本机 `envVar_v2.ini` 读取；安装后在插件页确认需要的插件已启用。
 
 `--archive` 可重复，填写 `dist` 直属历史包文件名或完整路径，以安装指定构建。未指定的配套插件仍使用 latest；安装按包内 peerDependencies 检查配套版本，版本不匹配时阻断。历史包允许早于当前源码版本，便于回装已有构建。`--archive` 仅适用于 `desktop install`。
 

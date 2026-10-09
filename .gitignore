@@ -70,7 +70,10 @@ Testing/
 dsh-plugins
 
 # Multi-repository manager local configuration and Python caches
-envVar_v2.local.ini
+# envVar_v2.ini 是本机配置（含 Desktop 安装路径），不进入仓库；仓库内没有这份文件，
+# 克隆后运行 python envBuild.py init 生成模板。
+# 用 envVar*.ini 通配：沿用 envVar 前缀改文件名时这里无需改动。
+envVar*.ini
 __pycache__/
 *.py[cod]
 dist

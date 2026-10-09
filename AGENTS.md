@@ -27,7 +27,7 @@
 
 ## 工程速览
 
-- 本仓库是**管理仓库**：通过 `submodules.ini`、`envVar_v2.ini` 管理 `dsh-plugins/` 下各自保留 Git 历史的独立插件仓库，并按依赖顺序调度构建、打包、安装到 DeepSeek Harness Desktop。
+- 本仓库是**管理仓库**：通过 `submodules.ini` 和本机 `envVar_v2.ini`（不提交）管理 `dsh-plugins/` 下各自保留 Git 历史的独立插件仓库，并按依赖顺序调度构建、打包、安装到 DeepSeek Harness Desktop。
 - 统一入口是根目录 `envBuild.py`，辅助模块在 `pythonProject/`；`README.md` 是行为与参数的权威说明，命令用法可用 `python envBuild.py -h` 查看。
 - 测试：`python -m unittest discover -s tests -v`。退出码约定：`0` 成功、`1` 运行失败或状态阻断、`2` 参数／配置无效、`130` 用户中断。
 - 构建产物统一落在根目录 `dist/`：`<包名>-<版本>.tgz` 为版本包，`dist/latest/` 保存最近一次成功打包的固定文件名副本。

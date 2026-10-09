@@ -9,7 +9,7 @@ from pythonProject import command_help
 from pythonProject.common import ConfigError, OperationError, project_root
 from pythonProject.desktop import Desktop
 from pythonProject.dsh_config import check_dsh, init_dsh
-from pythonProject.env_config import Environment, init_environment
+from pythonProject.env_config import ENV_FILE, Environment, init_environment
 from pythonProject.git_manager import GitManager
 from pythonProject.plugin_tasks import PluginTasks
 from pythonProject.repo_config import Manifest
@@ -44,7 +44,7 @@ class CommandHelpParser(argparse.ArgumentParser):
 def parser() -> argparse.ArgumentParser:
     root = CommandHelpParser(description="显式管理 dsh-plugins 下的独立 Git 仓库、插件构建和 Desktop。")
     commands = root.add_subparsers(dest="command", required=True, parser_class=CommandHelpParser)
-    commands.add_parser("init", help="仅创建缺失的 envVar_v2.ini，不覆盖已有文件")
+    commands.add_parser("init", help=f"仅创建缺失的 {ENV_FILE}，不覆盖已有文件")
     info = commands.add_parser("info", help="查看生效环境与工具路径")
     info.add_argument("--desktop", action="store_true", help="同时校验 Desktop 配置路径")
     listing = commands.add_parser("list", help="显示仓库清单（包含禁用项）")

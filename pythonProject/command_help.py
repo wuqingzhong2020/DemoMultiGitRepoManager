@@ -9,6 +9,8 @@ import sys
 import unicodedata
 from typing import Sequence, TextIO
 
+from .env_config import ENV_FILE
+
 PROGRAM = "python envBuild.py"
 _INDENT = "    "
 _GAP = " : "
@@ -17,9 +19,9 @@ _GAP = " : "
 _SECTIONS: Sequence[tuple[str, str, Sequence[tuple[str, str]]]] = (
     (
         "环境与信息",
-        "",
+        f"{ENV_FILE} 是本机配置，不进入仓库；克隆后先运行 init 生成模板。",
         (
-            ("init", "只创建缺失的 envVar_v2.ini 模板，已有配置保持原样"),
+            ("init", f"只创建缺失的本机 {ENV_FILE} 模板（不提交到仓库），已有配置保持原样"),
             ("info [--desktop]", "打印当前生效的环境变量与工具路径；--desktop 同时校验 Desktop 配置路径"),
             ("list [--repo 名称]", "显示仓库清单（含 enabled=false 的禁用项）、分支与依赖关系"),
         ),
@@ -95,7 +97,7 @@ _EXAMPLES: Sequence[tuple[str, Sequence[tuple[str, str]]]] = (
     (
         "环境与信息",
         (
-            ("init", "首次使用，只创建缺失的 envVar_v2.ini 模板"),
+            ("init", f"克隆后首次使用，创建缺失的本机 {ENV_FILE} 模板"),
             ("info --desktop", "打印生效环境并校验 Desktop 配置路径"),
             ("list --repo dsh-multi-git-repo-manager", "只看单个仓库的清单条目"),
         ),

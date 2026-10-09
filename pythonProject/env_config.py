@@ -17,7 +17,14 @@ DEFAULTS = {
     "MRM_DSH_DESKTOP_EXE": "", "MRM_DSH_PROFILE_DIR": "",
 }
 TIMEOUT_KEYS = ("MRM_GIT_TIMEOUT_SECONDS", "MRM_NETWORK_TIMEOUT_SECONDS", "MRM_TASK_TIMEOUT_SECONDS")
-ENV_TEMPLATE = """; 可通过 envVar_v2.local.ini 或 MRM_* 进程变量覆盖。
+# 本机配置文件名只在这里定义一次：改名时只改 ENV_FILE_STEM，
+# 文件名、模板注释、错误提示和命令帮助都会跟着变化。
+# .gitignore 用 envVar*.ini 通配忽略：沿用 envVar 前缀改名时无需改动，
+# 换成别的前缀要同步一行（tests 里有测试会拦下遗漏），README.md / AGENTS.md 中的名称按需替换。
+ENV_FILE_STEM = "envVar_v2"
+ENV_FILE = f"{ENV_FILE_STEM}.ini"
+ENV_TEMPLATE = f"""; 本机配置，不提交到仓库（见 .gitignore）；删除后可用 init 重新生成。
+; 也可用 MRM_* 进程变量覆盖，进程变量优先级最高。
 [envVar_all]
 MRM_GIT_EXE =
 MRM_NODE_EXE =
@@ -39,11 +46,11 @@ MRM_DSH_PROFILE_DIR =
 
 
 def init_environment(root: Path) -> bool:
-    path = root / "envVar_v2.ini"
+    path = root / ENV_FILE
     try:
         with path.open("x", encoding="utf-8", newline="\n") as target:
             target.write(ENV_TEMPLATE)
-        print(f"已创建 {path}，请填写本机 Desktop 路径。")
+        print(f"已创建本机配置 {path}（不提交到仓库），请填写本机 Desktop 路径。")
         return True
     except FileExistsError:
         print(f"已存在，保持原样: {path}")
@@ -60,22 +67,22 @@ class Environment:
         self.sources = {key: "通用默认值" for key in DEFAULTS}
         self._tools: dict[str, str] = {}
         self._tool_env: dict[str, str] = {}
-        for filename in ("envVar_v2.ini", "envVar_v2.local.ini"):
-            path = self.root / filename
-            if not path.exists():
-                continue
+        self.config_files: list[str] = []
+        path = self.root / ENV_FILE
+        if path.exists():
+            self.config_files.append(ENV_FILE)
             config = read_ini(path)
             for section in config.sections():
                 if section not in ("envVar_all", "envVar_windows", "envVar_linux"):
-                    raise ConfigError(f"{filename} 不支持节点 [{section}]")
+                    raise ConfigError(f"{ENV_FILE} 不支持节点 [{section}]")
                 unknown = set(config[section]) - set(DEFAULTS)
                 if unknown:
-                    raise ConfigError(f"{filename} [{section}] 未知参数: {', '.join(sorted(unknown))}")
+                    raise ConfigError(f"{ENV_FILE} [{section}] 未知参数: {', '.join(sorted(unknown))}")
             for section in ("envVar_all", f"envVar_{self.platform}"):
                 if section in config:
                     for key, value in config[section].items():
                         self.values[key] = value.strip()
-                        self.sources[key] = f"{filename} [{section}]"
+                        self.sources[key] = f"{ENV_FILE} [{section}]"
         for key in DEFAULTS:
             if key in self.environ:
                 self.values[key] = self.environ[key].strip()
@@ -169,7 +176,8 @@ class Environment:
     def desktop_directory(self) -> Path:
         directory = self.path("MRM_DSH_DESKTOP_DIR")
         if directory is None or not directory.is_dir():
-            raise OperationError("请在 envVar_v2.ini 或本机覆盖中配置有效的 MRM_DSH_DESKTOP_DIR")
+            raise OperationError(f"请在 {ENV_FILE} 中配置有效的 MRM_DSH_DESKTOP_DIR；"
+                                 "缺少本机配置时先运行 python envBuild.py init")
         return directory
 
     def desktop_executable(self) -> Path:
@@ -191,6 +199,9 @@ class Environment:
 
     def info(self, desktop: bool = False) -> int:
         print(f"工程: {self.root}\n平台: {self.platform}")
+        sources = "、".join(self.config_files) if self.config_files else (
+            f"未找到 {ENV_FILE}，可运行 python envBuild.py init 生成模板")
+        print(f"本机配置: {sources}")
         errors = False
         for key, value in self.values.items():
             print(f"{key} = {value or '(自动/未设置)'}  [{self.sources[key]}]")

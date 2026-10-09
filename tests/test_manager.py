@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import io
 import json
 import os
@@ -16,10 +17,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import envBuild
-from pythonProject.common import CommandResult, ConfigError, OperationError, Runner
+from pythonProject.common import CommandResult, ConfigError, OperationError, Runner, project_root
 from pythonProject.desktop import Desktop
 from pythonProject.dsh_config import PROJECT_FILE, check_dsh, expected_config, init_dsh
-from pythonProject.env_config import Environment, init_environment
+from pythonProject.env_config import ENV_FILE, Environment, init_environment
 from pythonProject.git_manager import GitManager
 from pythonProject.plugin_tasks import PluginTasks, package_info, verified_archive
 from pythonProject.package_artifacts import load_latest, package_stem, publish_archive
@@ -530,27 +531,58 @@ class EnvironmentAndRunnerTests(unittest.TestCase):
         self.root = Path(self.temporary.name).resolve()
         self.addCleanup(self.temporary.cleanup)
 
-    def test_overlay_priority_and_no_rewrite(self):
-        shared = self.root / "envVar_v2.ini"
-        shared.write_text("[envVar_all]\nMRM_GIT_TIMEOUT_SECONDS = 20\n[envVar_windows]\nMRM_GIT_TIMEOUT_SECONDS = 30\n", encoding="utf-8-sig")
-        local = self.root / "envVar_v2.local.ini"
-        local.write_text("[envVar_all]\nMRM_GIT_TIMEOUT_SECONDS = 40\n")
-        before = shared.read_bytes(), local.read_bytes()
+    def test_platform_overlay_priority_and_no_rewrite(self):
+        path = self.root / ENV_FILE
+        path.write_text("[envVar_all]\nMRM_GIT_TIMEOUT_SECONDS = 20\n[envVar_windows]\nMRM_GIT_TIMEOUT_SECONDS = 30\n", encoding="utf-8-sig")
+        before = path.read_bytes()
         env = Environment(self.root, {}, platform="windows")
-        self.assertEqual(env.timeout(), 40)
+        self.assertEqual(env.timeout(), 30)
         env = Environment(self.root, {"MRM_GIT_TIMEOUT_SECONDS": "50"}, platform="windows")
         self.assertEqual(env.timeout(), 50)
-        self.assertEqual((shared.read_bytes(), local.read_bytes()), before)
+        self.assertEqual(path.read_bytes(), before)
 
     def test_init_preserves_existing_file_and_rejects_invalid_timeout(self):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertTrue(init_environment(self.root))
-            path = self.root / "envVar_v2.ini"
+            path = self.root / ENV_FILE
             before = path.read_bytes()
             self.assertFalse(init_environment(self.root))
         self.assertEqual(path.read_bytes(), before)
         with self.assertRaises(ConfigError):
             Environment(self.root, {"MRM_TASK_TIMEOUT_SECONDS": "0"})
+
+    def test_init_template_is_usable_without_manual_edits(self):
+        # 本机配置文件不进入仓库，init 生成的模板必须能被直接解析并给出与代码一致的默认值。
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertTrue(init_environment(self.root))
+        env = Environment(self.root, {"MRM_GIT_EXE": GIT, "PATH": ""}, platform="windows")
+        self.assertEqual(env.config_files, [ENV_FILE])
+        self.assertEqual(env.timeout(), 30)
+        self.assertEqual(env.values["MRM_TASK_TIMEOUT_SECONDS"], "900")
+        self.assertEqual(env.values["MRM_DSH_DESKTOP_DIR"], "")
+
+    def test_missing_config_runs_on_defaults_and_hints_init(self):
+        # 克隆后没有本机配置文件：命令仍按默认值运行，并提示先生成模板。
+        env = Environment(self.root, {"MRM_GIT_EXE": GIT, "PATH": ""}, platform="windows")
+        self.assertEqual(env.config_files, [])
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(env.info(), 0)
+        self.assertIn("python envBuild.py init", output.getvalue())
+        with self.assertRaises(OperationError) as caught:
+            env.desktop_directory()
+        self.assertIn("python envBuild.py init", str(caught.exception))
+
+    def test_repo_gitignore_covers_configured_config_names(self):
+        # 文件名由 ENV_FILE_STEM 单点定义；改名的同时必须同步 .gitignore，
+        # 否则本机配置会被误提交，这里用真实仓库的忽略规则拦下这种遗漏。
+        gitignore = project_root() / ".gitignore"
+        if not gitignore.is_file():
+            self.skipTest("仓库根目录没有 .gitignore")
+        patterns = [line.strip() for line in gitignore.read_text(encoding="utf-8").splitlines()
+                    if line.strip() and not line.strip().startswith(("#", "!"))]
+        self.assertTrue(any(fnmatch.fnmatchcase(ENV_FILE, pattern) for pattern in patterns),
+                        f".gitignore 未忽略 {ENV_FILE}，改名后请同步忽略规则")
 
     def test_missing_optional_tools_do_not_block_git_info(self):
         values = {"MRM_GIT_EXE": GIT, "PATH": ""}
